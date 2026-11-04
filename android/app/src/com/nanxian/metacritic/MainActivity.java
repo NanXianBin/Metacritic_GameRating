@@ -1,0 +1,392 @@
+package com.nanxian.metacritic;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Metacritic 游戏评分 —— Android 客户端。
+ * 开发者：南仙
+ *
+ * 界面由本地 assets 中的 HTML/CSS/JS 渲染，原生层只负责两件事：
+ * 1) 通过 cn.bing.com 的免费接口翻译（App 内不使用任何大模型翻译）；
+ * 2) 抓取并解析 Metacritic 详情页，补全简介、开发商与平台信息。
+ */
+public class MainActivity extends Activity {
+
+    private static final String UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+    private WebView web;
+    private FrameLayout root;
+    private String bingIg;
+    private String bingToken;
+    private String bingKey;
+    private long bingAt;
+    private final Map<String, String> httpResults = new ConcurrentHashMap<>();
+    private final ExecutorService httpPool = Executors.newFixedThreadPool(6);
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        Window window = getWindow();
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false);
+        }
+
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#0B0618"));
+
+        web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#0B0618"));
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        }
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                int accent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        ? getColor(android.R.color.system_accent1_500)
+                        : 0xFF4D6BFE;
+                String hex = String.format("#%06X", 0xFFFFFF & accent);
+                view.evaluateJavascript(
+                        "window.__dynamicColors&&window.__dynamicColors({accent:'" + hex + "'})", null);
+            }
+        });
+        web.addJavascriptInterface(new Bridge(), "Android");
+
+        root.addView(web, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+
+        // Android 12 edge-to-edge: draw behind the system bars, pad the content
+        // so the WebView never sits under the status/navigation bar.
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            android.graphics.Insets bars = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
+
+        web.loadUrl("file:///android_asset/www/index.html");
+    }
+
+    @Override
+    public void onBackPressed() {
+        // Let the web layer decide first (detail -> list), then fall back to exit.
+        web.evaluateJavascript(
+                "(function(){if(window.__appBack&&window.__appBack()){return '1';}return '0';})()",
+                value -> {
+                    boolean handled = value != null && (value.contains("1") || value.contains("true"));
+                    if (!handled) {
+                        MainActivity.super.onBackPressed();
+                    }
+                });
+    }
+
+    private class Bridge {
+        @JavascriptInterface
+        public void translate(final String text, final String mode, final String id) {
+            new Thread(() -> {
+                String result = null;
+                try {
+                    result = bingTranslate(text);
+                } catch (Exception ignored) {
+                }
+                final String payload = result == null ? "null" : JSONObject.quote(result);
+                runOnUiThread(() -> web.evaluateJavascript(
+                        "window.__nativeTranslate(" + JSONObject.quote(id) + "," + payload + ")", null));
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void detail(final String slug, final String id) {
+            new Thread(() -> {
+                JSONObject result = null;
+                try {
+                    result = fetchDetail(slug);
+                } catch (Exception ignored) {
+                }
+                final String payload = result == null ? "null" : result.toString();
+                runOnUiThread(() -> web.evaluateJavascript(
+                        "window.__nativeDetail(" + JSONObject.quote(id) + "," + payload + ")", null));
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void toast(final String message) {
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        }
+
+        @JavascriptInterface
+        public void openUrl(String url) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                startActivity(intent);
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public void setTheme(final boolean light) {
+            runOnUiThread(() -> {
+                if (root != null) {
+                    root.setBackgroundColor(light ? Color.parseColor("#F4F5F7") : Color.parseColor("#0B0618"));
+                }
+                WindowInsetsController controller = getWindow().getInsetsController();
+                if (controller != null) {
+                    int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                            | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    controller.setSystemBarsAppearance(light ? mask : 0, mask);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void httpGet(final String url, final String id) {
+            httpPool.execute(() -> {
+                int status = 0;
+                String body = "";
+                try {
+                    HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+                    connection.setConnectTimeout(20000);
+                    connection.setReadTimeout(25000);
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setRequestProperty("User-Agent", UA);
+                    connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+                    connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7");
+                    connection.setRequestProperty("Referer", "https://www.metacritic.com/");
+                    connection.setRequestProperty("Cache-Control", "no-cache");
+                    status = connection.getResponseCode();
+                    InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                    if (input != null) {
+                        body = read(input);
+                    }
+                } catch (Exception ignored) {
+                }
+                httpResults.put(id, body);
+                final int code = status;
+                runOnUiThread(() -> web.evaluateJavascript(
+                        "window.__onHttp(" + JSONObject.quote(id) + "," + code + ")", null));
+            });
+        }
+
+        @JavascriptInterface
+        public String takeHttp(String id) {
+            String body = httpResults.remove(id);
+            return body == null ? "" : body;
+        }
+
+        @JavascriptInterface
+        public void saveState(String json) {
+            try (FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "state.json"))) {
+                out.write(json.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public String loadState() {
+            File file = new File(getFilesDir(), "state.json");
+            if (!file.exists()) {
+                return null;
+            }
+            try {
+                return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            } catch (Exception error) {
+                return null;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Bing 免费翻译（cn.bing.com/translator）
+    // ------------------------------------------------------------------
+
+    private void ensureBing() throws Exception {
+        if (bingIg != null && System.currentTimeMillis() - bingAt < 50L * 60L * 1000L) {
+            return;
+        }
+        String html = get("https://cn.bing.com/translator", null);
+        Matcher ig = Pattern.compile("IG:\"([0-9A-F]+)\"").matcher(html);
+        Matcher helper = Pattern.compile(
+                "params_AbusePreventionHelper\\s*=\\s*\\[(\\d+),\"([^\"]+)\",(\\d+)\\]").matcher(html);
+        if (!ig.find() || !helper.find()) {
+            throw new Exception("Bing token not found");
+        }
+        bingIg = ig.group(1);
+        bingKey = helper.group(1);
+        bingToken = helper.group(2);
+        bingAt = System.currentTimeMillis();
+    }
+
+    private String bingTranslate(String text) throws Exception {
+        ensureBing();
+        String body = "fromLang=en&to=zh-Hans&text=" + URLEncoder.encode(text, "UTF-8")
+                + "&token=" + URLEncoder.encode(bingToken, "UTF-8")
+                + "&key=" + URLEncoder.encode(bingKey, "UTF-8");
+        String url = "https://cn.bing.com/ttranslatev3?isVertical=1&&IG=" + bingIg
+                + "&IID=translator.5028.1";
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(25000);
+        connection.setRequestProperty("User-Agent", UA);
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        connection.setRequestProperty("Referer", "https://cn.bing.com/translator");
+        connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
+        connection.setDoOutput(true);
+        try (OutputStream out = connection.getOutputStream()) {
+            out.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+        String response = read(connection.getInputStream());
+        JSONArray array = new JSONArray(response);
+        return array.getJSONObject(0).getJSONArray("translations").getJSONObject(0).getString("text");
+    }
+
+    // ------------------------------------------------------------------
+    // Metacritic 详情
+    // ------------------------------------------------------------------
+
+    private JSONObject fetchDetail(String slug) throws Exception {
+        String url = "https://www.metacritic.com/game/" + slug + "/";
+        String html = get(url, "https://www.metacritic.com/");
+        JSONObject out = new JSONObject();
+
+        Matcher ld = Pattern.compile(
+                "<script type=\"application/ld\\+json\">([\\s\\S]*?)</script>").matcher(html);
+        if (ld.find()) {
+            try {
+                JSONObject json = new JSONObject(ld.group(1));
+                out.put("description", json.optString("description", ""));
+                out.put("releaseDate", json.optString("datePublished", ""));
+                out.put("publisher", joinObjects(json.optJSONArray("publisher")));
+                out.put("platforms", joinStrings(json.optJSONArray("gamePlatform")));
+                out.put("genres", joinStrings(json.optJSONArray("genre")));
+            } catch (Exception ignored) {
+            }
+        }
+
+        Matcher dev = Pattern.compile(
+                "(?s)Developer.{0,700}?<a[^>]+href=\"[^\"]*/company/[^\"]*\"[^>]*>([^<]+)</a>")
+                .matcher(html);
+        if (dev.find()) {
+            out.put("developer", dev.group(1).trim());
+        }
+
+        Matcher user = Pattern.compile(
+                "\"userScoreSummary\"\\s*:\\s*\\{[^}]*?\"score\"\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)")
+                .matcher(html);
+        if (user.find()) {
+            out.put("userScore", user.group(1));
+        }
+        Matcher count = Pattern.compile(
+                "\"userScoreSummary\"\\s*:\\s*\\{[^}]*?\"reviewCount\"\\s*:\\s*(\\d+)")
+                .matcher(html);
+        if (count.find()) {
+            out.put("userCount", count.group(1));
+        }
+        return out;
+    }
+
+    private String joinObjects(JSONArray array) {
+        if (array == null) return "";
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < array.length(); i++) {
+            try {
+                JSONObject item = array.getJSONObject(i);
+                String name = item.optString("name", "");
+                if (name.isEmpty()) continue;
+                if (builder.length() > 0) builder.append("、");
+                builder.append(name);
+            } catch (Exception ignored) {
+            }
+        }
+        return builder.toString();
+    }
+
+    private String joinStrings(JSONArray array) {
+        if (array == null) return "";
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < array.length(); i++) {
+            String value = array.optString(i, "");
+            if (value.isEmpty()) continue;
+            if (builder.length() > 0) builder.append("、");
+            builder.append(value);
+        }
+        return builder.toString();
+    }
+
+    private String get(String url, String referer) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(25000);
+        connection.setRequestProperty("User-Agent", UA);
+        connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
+        if (referer != null) connection.setRequestProperty("Referer", referer);
+        return read(connection.getInputStream());
+    }
+
+    private String read(InputStream input) throws Exception {
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+            char[] buffer = new char[8192];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                builder.append(buffer, 0, read);
+            }
+        }
+        return builder.toString();
+    }
+}

@@ -1,0 +1,9 @@
+android/app/assets/www/data.js
+build/
+release/
+*.jks
+*.keystore
+node_modules/
+.edge-copy/
+.edge-copy2/
+.edge-copy3/
