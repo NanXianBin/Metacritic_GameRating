@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '2.1');
+        return String(window.Android.getVersionName() || '2.2');
       }
     } catch (error) { /* ignore */ }
-    return '2.1';
+    return '2.2';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -851,7 +851,7 @@
             '<button class="icon-btn" id="moreBtn" aria-label="更多">⋯</button>' +
           '</div>' +
         '</div>' +
-        '<div class="tools">' +
+        '<div class="tools" id="toolsRow">' +
           '<button class="tool" id="incBtn"' + (state.busy ? ' disabled' : '') + '>实时抓取</button>' +
           '<button class="tool" id="fullBtn"' + (state.busy ? ' disabled' : '') + '>全量重建</button>' +
           '<button class="tool" id="bulkBtn"' + (state.busy || translating ? ' disabled' : '') + '>批量翻译</button>' +
@@ -1173,6 +1173,18 @@
   rebuildFacets();
   restoreFilters();
   render();
+
+  var lastScrollY = 0;
+  window.addEventListener('scroll', function () {
+    var y = window.scrollY || 0;
+    var tools = document.getElementById('toolsRow');
+    if (!tools) return;
+    // Hiding the row changes document height and therefore scrollY, so only
+    // use absolute thresholds (no direction delta) to avoid add/remove loops.
+    if (y > 80) tools.classList.add('hidden');
+    else if (y < 40) tools.classList.remove('hidden');
+    lastScrollY = y;
+  }, { passive: true });
 
   window.__openGame = function (index) {
     var game = allGames()[index];

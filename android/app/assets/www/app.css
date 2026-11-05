@@ -306,3 +306,20 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .mustplay-field .switch { width: 36px; height: 20px; }
 .mustplay-field .switch i:after { top: 2px; left: 2px; width: 16px; height: 16px; }
 .mustplay-field .switch input:checked + i:after { transform: translateX(16px); }
+
+/* ---------- compact header / collapsing tools ---------- */
+.head { padding: calc(env(safe-area-inset-top) + 6px) 14px 6px; }
+.head-top .brand h1 { font-size: 16px; }
+.tools { padding: 8px 0 0; max-height: 52px; opacity: 1; overflow: hidden; transition: max-height 0.22s ease, opacity 0.18s ease, padding 0.22s ease; }
+.tools.hidden { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; pointer-events: none; }
+.filters { padding: 8px 14px 10px; }
+
+/* ---------- tighter header ---------- */
+.head { padding: calc(env(safe-area-inset-top) + 4px) 14px 4px; }
+.head-top .logo { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; }
+.head-top .brand h1 { font-size: 15px; }
+.head-top .brand .sub { font-size: 10px; }
+.head-top .icon-btn { width: 34px; height: 34px; border-radius: 10px; font-size: 15px; }
+.tools { padding: 6px 0 0; max-height: 48px; }
+.tool { height: 34px; }
+.filters { padding: 6px 14px 10px; }

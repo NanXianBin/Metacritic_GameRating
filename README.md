@@ -20,6 +20,7 @@
 | [v1.9](versions/v1.9) | 主题与「⋯」按钮合并靠右，主题在左、⋯在右 |
 | [v2.0](versions/v2.0) | Must Play 筛选开关与详情页 Must Play 徽章 |
 | [v2.1](versions/v2.1) | Must-Play 开关与排序同排平分，文案精简 |
+| [v2.2](versions/v2.2) | 滚动隐藏工具行，头部更紧凑 |
 
 每个版本目录包含：
 
