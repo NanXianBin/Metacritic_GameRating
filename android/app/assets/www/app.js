@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '1.9');
+        return String(window.Android.getVersionName() || '2.0');
       }
     } catch (error) { /* ignore */ }
-    return '1.9';
+    return '2.0';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -148,6 +148,7 @@
       platforms: Array.isArray(row.pl) ? row.pl : [],
       cover: row.cv || null,
       summary: row.sm || null,
+      badge: row.b || null,
       titleCn: row.c || null,
     };
   }
@@ -155,6 +156,13 @@
   var initialGames = stored && Array.isArray(stored.games) && stored.games.length
     ? stored.games
     : BUNDLE.map(fromBundle);
+  var bundleBadges = {};
+  BUNDLE.forEach(function (row) {
+    if (row.b) bundleBadges[row.uu] = row.b;
+  });
+  initialGames.forEach(function (game) {
+    if (!game.badge && bundleBadges[game.slug]) game.badge = bundleBadges[game.slug];
+  });
   var translations = (stored && stored.translations) || {};
   var details = (stored && stored.details) || {};
   var yearsInfo = (stored && stored.years) || {};
@@ -227,6 +235,7 @@
     to: null,
     selectedPlatforms: [],
     sort: 'score',
+    mustPlay: false,
     limit: 60,
     detail: null,
     theme: localStorage.getItem('mcg.theme') || 'light',
@@ -244,6 +253,7 @@
         to: state.to,
         platforms: state.selectedPlatforms,
         sort: state.sort,
+        mustPlay: state.mustPlay,
       }));
     } catch (error) {
       /* storage may be unavailable */
@@ -260,6 +270,7 @@
     if (!data || typeof data !== 'object') return;
     if (typeof data.q === 'string') state.q = data.q;
     if (['score', 'score_asc', 'name'].indexOf(data.sort) !== -1) state.sort = data.sort;
+    if (typeof data.mustPlay === 'boolean') state.mustPlay = data.mustPlay;
     if (Array.isArray(data.platforms)) {
       state.selectedPlatforms = data.platforms.filter(function (name) {
         return platforms.indexOf(name) !== -1;
@@ -345,6 +356,7 @@
           if (game.year && (game.year < state.from || game.year > state.to)) return;
         }
       }
+      if (state.mustPlay && game.badge !== 'must-play') return;
       if (needle) {
         var hay = (game.title + ' ' + tr(game.title) + ' ' + (game.summary || '')).toLowerCase();
         if (hay.indexOf(needle) === -1) return;
@@ -854,6 +866,7 @@
           '<button class="field" id="platformBtn" type="button"><span class="fl">平台</span><span class="fv">' + (state.selectedPlatforms.length ? '已选 ' + state.selectedPlatforms.length + ' 个' : '全部平台') + '</span></button>' +
           '<button class="field" id="sortBtn" type="button"><span class="fl">排序</span><span class="fv">' + sortLabel(state.sort) + '</span></button>' +
         '</div>' +
+        '<label class="switch-row"><span>只显示 Metacritic Must Play</span><span class="switch"><input type="checkbox" id="mustPlayToggle"' + (state.mustPlay ? ' checked' : '') + ' /><i></i></span></label>' +
       '</div>' +
       '<div class="stats" id="stats"></div>' +
       '<div class="list" id="list"></div>' +
@@ -887,6 +900,12 @@
     document.getElementById('platformBtn').addEventListener('click', openPlatformSheet);
     document.getElementById('sortBtn').addEventListener('click', openSortSheet);
     document.getElementById('moreBtn').addEventListener('click', openMoreDialog);
+    document.getElementById('mustPlayToggle').addEventListener('change', function (event) {
+      state.mustPlay = event.target.checked;
+      state.limit = 60;
+      saveFilters();
+      renderList();
+    });
     if (state.busy && state.progress) updateProgressBar();
     if (state.bulk) updateBulkBar();
   }
@@ -1091,6 +1110,7 @@
           '<div class="info">' +
             '<h2>' + esc(primary) + '</h2>' +
             (secondary ? '<p class="en">' + esc(secondary) + '</p>' : '') +
+            (((extra.badge || game.badge) === 'must-play') ? '<div class="mustplay-badge">★ Metacritic Must Play</div>' : '') +
             (metaChips.length ? '<div class="meta">' + metaChips.join('') + '</div>' : '') +
             '<div class="scores">' +
               '<div class="scorebox"><div class="k">Metascore</div><div class="v ' + tone(extra.metascore != null ? extra.metascore : game.score) + '">' + (extra.metascore != null ? extra.metascore : game.score == null ? '—' : game.score) + '</div></div>' +
