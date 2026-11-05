@@ -280,10 +280,11 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .d-topbar .d-back { margin: 0; }
 .d-refresh:disabled { opacity: 0.55; }
 
-/* ---------- header links / update sheet ---------- */
-.head-links { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
-.linkbtn { height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: var(--link); font-size: 12px; font-weight: 600; }
-.linkbtn:active { background: color-mix(in srgb, var(--brand) 12%, transparent); }
-.linkbtn:disabled { opacity: 0.55; }
+/* ---------- more dialog / update sheet ---------- */
+.dialog { position: fixed; left: 50%; top: 50%; z-index: 90; width: min(300px, 84vw); display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 24px; background: var(--card); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32); opacity: 0; transform: translate(-50%, -50%) scale(0.94); transition: opacity 0.18s ease, transform 0.18s ease; }
+.dialog.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.dialog-title { font-size: 17px; font-weight: 700; margin-bottom: 2px; }
+.dialog .tool { flex: none; width: 100%; height: 44px; }
+.dialog .btn-text { align-self: flex-end; }
 .update-name { margin: -6px 0 10px; font-size: 13px; color: var(--muted); }
 .update-notes { max-height: 42vh; overflow: auto; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text); }

@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '1.7');
+        return String(window.Android.getVersionName() || '1.8');
       }
     } catch (error) { /* ignore */ }
-    return '1.7';
+    return '1.8';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -703,6 +703,51 @@
     });
   }
 
+  var dialogNodes = null;
+
+  function closeDialog() {
+    if (!dialogNodes) return;
+    var nodes = dialogNodes;
+    dialogNodes = null;
+    nodes.scrim.classList.remove('show');
+    nodes.dialog.classList.remove('show');
+    setTimeout(function () {
+      if (nodes.scrim.parentNode) nodes.scrim.parentNode.removeChild(nodes.scrim);
+      if (nodes.dialog.parentNode) nodes.dialog.parentNode.removeChild(nodes.dialog);
+    }, 200);
+  }
+
+  function openMoreDialog() {
+    closeDialog();
+    var scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    var dialog = document.createElement('div');
+    dialog.className = 'dialog';
+    dialog.innerHTML =
+      '<div class="dialog-title">更多</div>' +
+      '<button class="tool" id="dialogUpdate" type="button">检查更新</button>' +
+      '<button class="tool" id="dialogGithub" type="button">GitHub 仓库 ↗</button>' +
+      '<button class="btn-text" id="dialogCancel" type="button">取消</button>';
+    document.body.appendChild(scrim);
+    document.body.appendChild(dialog);
+    scrim.addEventListener('click', closeDialog);
+    dialogNodes = { scrim: scrim, dialog: dialog };
+    requestAnimationFrame(function () {
+      scrim.classList.add('show');
+      dialog.classList.add('show');
+    });
+    document.getElementById('dialogUpdate').addEventListener('click', function () {
+      closeDialog();
+      checkUpdate();
+    });
+    document.getElementById('dialogGithub').addEventListener('click', function () {
+      closeDialog();
+      if (window.Android && window.Android.openUrl) window.Android.openUrl(GITHUB_URL);
+      else window.open(GITHUB_URL, '_blank');
+    });
+    document.getElementById('dialogCancel').addEventListener('click', closeDialog);
+  }
+
   function versionParts(value) {
     return String(value || '').replace(/^v/i, '').split('.').map(function (part) {
       var number = parseInt(part, 10);
@@ -789,11 +834,8 @@
           '<div class="brand"><div class="logo">M</div>' +
             '<div><h1>Metacritic 游戏评分</h1><p class="sub">开发者：南仙 · 数据来自 Metacritic</p></div>' +
           '</div>' +
+          '<button class="icon-btn" id="moreBtn" aria-label="更多">⋯</button>' +
           '<button class="icon-btn" id="themeBtn" aria-label="切换主题">' + (state.theme === 'neon' ? '☀' : '✦') + '</button>' +
-        '</div>' +
-        '<div class="head-links">' +
-          '<button class="linkbtn" id="checkUpdateBtn" type="button">检查更新</button>' +
-          '<button class="linkbtn" id="githubBtn" type="button">GitHub 仓库 ↗</button>' +
         '</div>' +
         '<div class="tools">' +
           '<button class="tool" id="incBtn"' + (state.busy ? ' disabled' : '') + '>实时抓取</button>' +
@@ -842,12 +884,7 @@
     document.getElementById('yearBtn').addEventListener('click', openYearSheet);
     document.getElementById('platformBtn').addEventListener('click', openPlatformSheet);
     document.getElementById('sortBtn').addEventListener('click', openSortSheet);
-    document.getElementById('checkUpdateBtn').addEventListener('click', checkUpdate);
-    document.getElementById('githubBtn').addEventListener('click', function () {
-      if (window.Android && window.Android.openUrl) window.Android.openUrl(GITHUB_URL);
-      else window.open(GITHUB_URL, '_blank');
-    });
-    if (state.busy && state.progress) updateProgressBar();
+    document.getElementById('moreBtn').addEventListener('click', openMoreDialog);    if (state.busy && state.progress) updateProgressBar();
     if (state.bulk) updateBulkBar();
   }
 
@@ -1103,6 +1140,7 @@
   }
 
   window.__appBack = function () {
+    if (dialogNodes) { closeDialog(); return true; }
     if (sheetNodes) { closeSheet(); return true; }
     if (state.detail) { state.detail = null; render(); return true; }
     return false;
