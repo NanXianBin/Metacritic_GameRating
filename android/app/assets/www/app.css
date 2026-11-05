@@ -274,3 +274,8 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .year-item { height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font-size: 14px; text-align: center; flex: none; }
 .year-item.on { background: var(--brand); color: #fff; font-weight: 700; }
 .selects #sortBtn { grid-column: 1 / -1; }
+
+/* ---------- detail topbar / refresh ---------- */
+.d-topbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
+.d-topbar .d-back { margin: 0; }
+.d-refresh:disabled { opacity: 0.55; }

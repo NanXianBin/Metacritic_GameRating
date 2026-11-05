@@ -226,6 +226,48 @@
     bulk: null,
   };
 
+  var FILTER_KEY = 'mcg.filters';
+  function saveFilters() {
+    try {
+      localStorage.setItem(FILTER_KEY, JSON.stringify({
+        q: state.q,
+        from: state.from,
+        to: state.to,
+        platforms: state.selectedPlatforms,
+        sort: state.sort,
+      }));
+    } catch (error) {
+      /* storage may be unavailable */
+    }
+  }
+  function restoreFilters() {
+    var data = null;
+    try {
+      var raw = localStorage.getItem(FILTER_KEY);
+      if (raw) data = JSON.parse(raw);
+    } catch (error) {
+      data = null;
+    }
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.q === 'string') state.q = data.q;
+    if (['score', 'score_asc', 'name'].indexOf(data.sort) !== -1) state.sort = data.sort;
+    if (Array.isArray(data.platforms)) {
+      state.selectedPlatforms = data.platforms.filter(function (name) {
+        return platforms.indexOf(name) !== -1;
+      });
+    }
+    if (years.length && Number.isFinite(data.from) && Number.isFinite(data.to)) {
+      var min = years[years.length - 1];
+      var max = years[0];
+      var from = Math.max(min, Math.min(max, data.from));
+      var to = Math.max(min, Math.min(max, data.to));
+      if (from <= to) {
+        state.from = from;
+        state.to = to;
+      }
+    }
+  }
+
   var years = [];
   var platforms = [];
   function rebuildFacets() {
@@ -576,6 +618,7 @@
       state.from = Math.min(draft.from, draft.to);
       state.to = Math.max(draft.from, draft.to);
       state.limit = 60;
+      saveFilters();
       closeSheet();
       shell();
       renderList();
@@ -596,6 +639,7 @@
       row.addEventListener('click', function () {
         state.sort = row.getAttribute('data-sort');
         state.limit = 60;
+        saveFilters();
         closeSheet();
         shell();
         renderList();
@@ -643,6 +687,7 @@
     document.getElementById('sheetApply').addEventListener('click', function () {
       state.selectedPlatforms = picked.slice();
       state.limit = 60;
+      saveFilters();
       closeSheet();
       shell();
       renderList();
@@ -702,12 +747,11 @@
     search.addEventListener('input', function () {
       clearTimeout(timer);
       var value = search.value;
-      timer = setTimeout(function () { state.q = value; state.limit = 60; renderList(); }, 220);
+      timer = setTimeout(function () { state.q = value; state.limit = 60; saveFilters(); renderList(); }, 220);
     });
     document.getElementById('yearBtn').addEventListener('click', openYearSheet);
     document.getElementById('platformBtn').addEventListener('click', openPlatformSheet);
     document.getElementById('sortBtn').addEventListener('click', openSortSheet);
-
     if (state.busy && state.progress) updateProgressBar();
     if (state.bulk) updateBulkBar();
   }
@@ -764,11 +808,11 @@
   // ------------------------------------------------------------------
   // detail
   // ------------------------------------------------------------------
-  function openDetail(game) {
+  function loadDetail(game, force) {
     state.detail = { game: game, extra: null, loading: true, error: null, distribution: {}, summary: null, summaryBusy: false, summaryError: null };
     render();
-    window.scrollTo(0, 0);
-    var cached = details[game.slug];
+    if (force) delete details[game.slug];
+    var cached = force ? null : details[game.slug];
     if (cached && Date.now() - (cached.fetchedAt || 0) < 7 * 24 * 3600 * 1000) {
       state.detail.extra = cached;
       state.detail.loading = false;
@@ -793,6 +837,17 @@
       state.detail.error = error && error.message ? error.message : '详情加载失败';
       render();
     });
+  }
+
+  function openDetail(game) {
+    loadDetail(game, false);
+    window.scrollTo(0, 0);
+  }
+
+  function refreshDetail() {
+    if (!state.detail || state.detail.loading) return;
+    loadDetail(state.detail.game, true);
+    window.scrollTo(0, 0);
   }
 
   function autoLeadDistribution() {
@@ -895,6 +950,7 @@
     app.innerHTML =
       '<div class="detail">' +
         '<button class="d-back" id="backBtn">← 返回列表</button>' +
+        '<button class="d-back d-refresh" id="refreshDetailBtn"' + (detail.loading ? ' disabled' : '') + '>' + (detail.loading ? '刷新中…' : '刷新数据') + '</button>' +
         '<div class="hero">' +
           '<div class="poster">' + (game.cover ? '<img src="' + esc(game.cover) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()" />' : '▦') + '</div>' +
           '<div class="info">' +
@@ -929,6 +985,7 @@
       state.detail = null;
       render();
     });
+    document.getElementById('refreshDetailBtn').addEventListener('click', refreshDetail);
     var transBtn = document.getElementById('transBtn');
     if (transBtn) transBtn.addEventListener('click', translateSummary);
     var link = app.querySelector('.link-mc');
@@ -958,6 +1015,7 @@
 
   applyTheme();
   rebuildFacets();
+  restoreFilters();
   render();
 
   window.__openGame = function (index) {

@@ -14,6 +14,7 @@
 | [v1.3](versions/v1.3) | 年份弹层、平台多选、排序精简、Material 3 组件、SplashScreen / Edge-to-edge / Material You |
 | [v1.4](versions/v1.4) | 排序与年份改 M3 选择器，发行商移入标题信息行 |
 | [v1.5](versions/v1.5) | 平台 + 年份索引，平台筛选结果与 Metacritic 官网一致 |
+| [v1.6](versions/v1.6) | 筛选条件持久化，详情页新增「刷新数据」按钮 |
 
 每个版本目录包含：
 
