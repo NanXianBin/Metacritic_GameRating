@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '2.3');
+        return String(window.Android.getVersionName() || '2.4');
       }
     } catch (error) { /* ignore */ }
-    return '2.3';
+    return '2.4';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);

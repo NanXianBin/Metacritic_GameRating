@@ -330,3 +330,13 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .dlbar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .dlbar i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #7b5cff, #ff5cc8); transition: width 0.2s ease; }
 .dl-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+/* ---------- larger header, single status-bar inset ---------- */
+.head { padding: 6px 14px 6px; }
+.head-top .logo { width: 34px; height: 34px; border-radius: 10px; font-size: 15px; }
+.head-top .brand h1 { font-size: 18px; }
+.head-top .brand .sub { font-size: 11px; }
+.head-top .icon-btn { width: 40px; height: 40px; border-radius: 12px; font-size: 17px; }
+.tools { padding: 6px 0 0; max-height: 52px; }
+.tool { height: 36px; }
+.filters { padding: 6px 14px 10px; }
