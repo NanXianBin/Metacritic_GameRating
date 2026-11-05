@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '2.0');
+        return String(window.Android.getVersionName() || '2.1');
       }
     } catch (error) { /* ignore */ }
-    return '2.0';
+    return '2.1';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -865,8 +865,8 @@
           '<button class="field" id="yearBtn" type="button"><span class="fl">年份</span><span class="fv">' + esc(state.from) + ' – ' + esc(state.to) + '</span></button>' +
           '<button class="field" id="platformBtn" type="button"><span class="fl">平台</span><span class="fv">' + (state.selectedPlatforms.length ? '已选 ' + state.selectedPlatforms.length + ' 个' : '全部平台') + '</span></button>' +
           '<button class="field" id="sortBtn" type="button"><span class="fl">排序</span><span class="fv">' + sortLabel(state.sort) + '</span></button>' +
+          '<label class="field mustplay-field"><span class="fl">Must-Play</span><span class="switch"><input type="checkbox" id="mustPlayToggle"' + (state.mustPlay ? ' checked' : '') + ' /><i></i></span></label>' +
         '</div>' +
-        '<label class="switch-row"><span>只显示 Metacritic Must Play</span><span class="switch"><input type="checkbox" id="mustPlayToggle"' + (state.mustPlay ? ' checked' : '') + ' /><i></i></span></label>' +
       '</div>' +
       '<div class="stats" id="stats"></div>' +
       '<div class="list" id="list"></div>' +
