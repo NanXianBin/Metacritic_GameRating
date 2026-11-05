@@ -323,3 +323,10 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .tools { padding: 6px 0 0; max-height: 48px; }
 .tool { height: 34px; }
 .filters { padding: 6px 14px 10px; }
+
+/* ---------- update download ---------- */
+.download-dialog { width: min(320px, 86vw); }
+.dl-status { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.dlbar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.dlbar i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #7b5cff, #ff5cc8); transition: width 0.2s ease; }
+.dl-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }

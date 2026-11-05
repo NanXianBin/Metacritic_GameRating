@@ -21,6 +21,7 @@
 | [v2.0](versions/v2.0) | Must Play 筛选开关与详情页 Must Play 徽章 |
 | [v2.1](versions/v2.1) | Must-Play 开关与排序同排平分，文案精简 |
 | [v2.2](versions/v2.2) | 滚动隐藏工具行，头部更紧凑 |
+| [v2.3](versions/v2.3) | 应用内更新下载：直连 → gh-proxy → 浏览器，带进度条 |
 
 每个版本目录包含：
 

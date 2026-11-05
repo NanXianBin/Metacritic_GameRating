@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '2.2');
+        return String(window.Android.getVersionName() || '2.3');
       }
     } catch (error) { /* ignore */ }
-    return '2.2';
+    return '2.3';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -798,10 +798,86 @@
     document.getElementById('updateLater').addEventListener('click', closeSheet);
     document.getElementById('updateGo').addEventListener('click', function () {
       closeSheet();
-      if (window.Android && window.Android.openUrl) window.Android.openUrl(url);
-      else window.open(url, '_blank');
+      startDownload(tag, url);
     });
   }
+
+  var downloadNodes = null;
+
+  function closeDownloadDialog() {
+    if (!downloadNodes) return;
+    var nodes = downloadNodes;
+    downloadNodes = null;
+    nodes.scrim.classList.remove('show');
+    nodes.dialog.classList.remove('show');
+    setTimeout(function () {
+      if (nodes.scrim.parentNode) nodes.scrim.parentNode.removeChild(nodes.scrim);
+      if (nodes.dialog.parentNode) nodes.dialog.parentNode.removeChild(nodes.dialog);
+    }, 200);
+  }
+
+  function showDownloadDialog(tag) {
+    closeDownloadDialog();
+    var scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    var dialog = document.createElement('div');
+    dialog.className = 'dialog download-dialog';
+    dialog.innerHTML =
+      '<div class="dialog-title">下载更新 ' + esc(tag) + '</div>' +
+      '<div class="dl-status" id="dlStatus">准备下载…</div>' +
+      '<div class="dlbar"><i id="dlBar"></i></div>' +
+      '<div class="dl-foot"><span id="dlPercent">0%</span>' +
+      '<button class="btn-text" id="dlCancel" type="button">取消</button></div>';
+    document.body.appendChild(scrim);
+    document.body.appendChild(dialog);
+    scrim.addEventListener('click', function () {
+      if (window.Android && window.Android.cancelDownload) window.Android.cancelDownload();
+      closeDownloadDialog();
+    });
+    downloadNodes = { scrim: scrim, dialog: dialog };
+    requestAnimationFrame(function () {
+      scrim.classList.add('show');
+      dialog.classList.add('show');
+    });
+    document.getElementById('dlCancel').addEventListener('click', function () {
+      if (window.Android && window.Android.cancelDownload) window.Android.cancelDownload();
+      closeDownloadDialog();
+    });
+  }
+
+  function startDownload(tag, pageUrl) {
+    var version = String(tag || '').replace(/^v/i, '');
+    var direct = GITHUB_URL + '/releases/download/v' + version + '/Metacritic-v' + version + '.apk';
+    var proxy = 'https://v4.gh-proxy.org/' + direct;
+    if (window.Android && window.Android.downloadApk) {
+      showDownloadDialog(tag);
+      window.Android.downloadApk(direct, proxy, pageUrl);
+    } else {
+      window.open(direct, '_blank');
+    }
+  }
+
+  window.__downloadProgress = function (payload) {
+    if (!payload) return;
+    if (!downloadNodes) return;
+    var status = payload.status || '';
+    var percent = Number(payload.percent) || 0;
+    var bar = document.getElementById('dlBar');
+    var percentNode = document.getElementById('dlPercent');
+    var statusNode = document.getElementById('dlStatus');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+    if (percentNode) percentNode.textContent = Math.max(0, Math.min(100, percent)) + '%';
+    if (statusNode && payload.message) statusNode.textContent = payload.message;
+    if (status === 'cancelled') {
+      closeDownloadDialog();
+    } else if (status === 'fallback') {
+      closeDownloadDialog();
+      toast('直连与代理均不可用，正在打开浏览器');
+    } else if (status === 'done') {
+      closeDownloadDialog();
+      toast('更新完成');
+    }
+  };
 
   function checkUpdate() {
     if (updateChecking) return;
@@ -1163,6 +1239,11 @@
   }
 
   window.__appBack = function () {
+    if (downloadNodes) {
+      if (window.Android && window.Android.cancelDownload) window.Android.cancelDownload();
+      closeDownloadDialog();
+      return true;
+    }
     if (dialogNodes) { closeDialog(); return true; }
     if (sheetNodes) { closeSheet(); return true; }
     if (state.detail) { state.detail = null; render(); return true; }

@@ -1,7 +1,12 @@
 package com.nanxian.metacritic;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageInstaller;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -23,6 +28,7 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -52,6 +58,7 @@ public class MainActivity extends Activity {
     private static final String UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    private static final String ACTION_INSTALL_COMMIT = "com.nanxian.metacritic.INSTALL_COMMIT";
 
     private WebView web;
     private FrameLayout root;
@@ -61,6 +68,9 @@ public class MainActivity extends Activity {
     private long bingAt;
     private final Map<String, String> httpResults = new ConcurrentHashMap<>();
     private final ExecutorService httpPool = Executors.newFixedThreadPool(6);
+    private volatile boolean downloadCancelled = false;
+    private volatile HttpURLConnection downloadConnection = null;
+    private BroadcastReceiver installReceiver = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -257,6 +267,41 @@ public class MainActivity extends Activity {
                 return null;
             }
         }
+
+        @JavascriptInterface
+        public void downloadApk(final String directUrl, final String proxyUrl, final String pageUrl) {
+            downloadCancelled = false;
+            new Thread(() -> {
+                File apk = new File(getCacheDir(), "update.apk");
+                boolean ok = tryDownload(directUrl, apk, "直连");
+                if (!ok && !downloadCancelled) {
+                    ok = tryDownload(proxyUrl, apk, "代理");
+                }
+                if (downloadCancelled) {
+                    sendDownloadState("cancelled", 0, "已取消下载");
+                    return;
+                }
+                if (!ok) {
+                    sendDownloadState("fallback", 0, "下载失败，正在打开浏览器");
+                    runOnUiThread(() -> openUrl(pageUrl));
+                    return;
+                }
+                sendDownloadState("installing", 100, "下载完成，正在安装…");
+                installApk(apk);
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void cancelDownload() {
+            downloadCancelled = true;
+            HttpURLConnection connection = downloadConnection;
+            if (connection != null) {
+                try {
+                    connection.disconnect();
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -385,6 +430,115 @@ public class MainActivity extends Activity {
         connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
         if (referer != null) connection.setRequestProperty("Referer", referer);
         return read(connection.getInputStream());
+    }
+
+    private boolean tryDownload(String url, File target, String label) {
+        if (downloadCancelled) return false;
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            downloadConnection = connection;
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(60000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", UA);
+            connection.setRequestProperty("Accept", "application/vnd.android.package-archive,*/*");
+            int status = connection.getResponseCode();
+            if (status != 200) return false;
+            long total = connection.getContentLengthLong();
+            if (total > 0 && total < 500000L) return false;
+            try (InputStream input = connection.getInputStream();
+                 FileOutputStream output = new FileOutputStream(target)) {
+                byte[] buffer = new byte[64 * 1024];
+                long done = 0;
+                int read;
+                int lastPercent = -1;
+                while ((read = input.read(buffer)) != -1) {
+                    if (downloadCancelled) return false;
+                    output.write(buffer, 0, read);
+                    done += read;
+                    int percent = total > 0 ? (int) (done * 100 / total) : -1;
+                    if (percent != lastPercent) {
+                        lastPercent = percent;
+                        sendDownloadState("downloading", Math.max(0, percent), label + "下载中");
+                    }
+                }
+            }
+            if (target.length() < 500000L) return false;
+            try (FileInputStream input = new FileInputStream(target)) {
+                byte[] head = new byte[2];
+                if (input.read(head) != 2 || head[0] != 'P' || head[1] != 'K') return false;
+            }
+            return true;
+        } catch (Exception error) {
+            return false;
+        } finally {
+            if (connection != null) connection.disconnect();
+            downloadConnection = null;
+        }
+    }
+
+    private void sendDownloadState(String status, int percent, String message) {
+        final String script = "window.__downloadProgress&&window.__downloadProgress({status:"
+                + JSONObject.quote(status) + ",percent:" + percent + ",message:" + JSONObject.quote(message) + "})";
+        runOnUiThread(() -> web.evaluateJavascript(script, null));
+    }
+
+    private void installApk(File apk) {
+        try {
+            PackageInstaller installer = getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            int sessionId = installer.createSession(params);
+            PackageInstaller.Session session = installer.openSession(sessionId);
+            try (InputStream input = new FileInputStream(apk);
+                 OutputStream output = session.openWrite("update.apk", 0, apk.length())) {
+                byte[] buffer = new byte[64 * 1024];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                }
+                session.fsync(output);
+            }
+            Intent resultIntent = new Intent(ACTION_INSTALL_COMMIT);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                flags |= PendingIntent.FLAG_MUTABLE;
+            }
+            PendingIntent pending = PendingIntent.getBroadcast(this, sessionId, resultIntent, flags);
+            if (installReceiver == null) {
+                installReceiver = new BroadcastReceiver() {
+                    @Override
+                    public void onReceive(Context context, Intent intent) {
+                        int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS,
+                                PackageInstaller.STATUS_FAILURE);
+                        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+                            if (confirm != null) {
+                                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(confirm);
+                            }
+                            sendDownloadState("confirm", 100, "请在系统弹窗中确认安装");
+                        } else if (status == PackageInstaller.STATUS_SUCCESS) {
+                            sendDownloadState("done", 100, "安装完成");
+                        } else {
+                            String message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+                            sendDownloadState("error", 0, "安装失败：" + (message == null ? "未知错误" : message));
+                        }
+                    }
+                };
+                IntentFilter filter = new IntentFilter(ACTION_INSTALL_COMMIT);
+                if (Build.VERSION.SDK_INT >= 33) {
+                    registerReceiver(installReceiver, filter, Context.RECEIVER_EXPORTED);
+                } else {
+                    registerReceiver(installReceiver, filter);
+                }
+            }
+            session.commit(pending.getIntentSender());
+            session.close();
+        } catch (Exception error) {
+            sendDownloadState("error", 0, "安装失败：" + error.getMessage());
+        }
     }
 
     private String read(InputStream input) throws Exception {
