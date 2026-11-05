@@ -279,3 +279,11 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .d-topbar { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; }
 .d-topbar .d-back { margin: 0; }
 .d-refresh:disabled { opacity: 0.55; }
+
+/* ---------- header links / update sheet ---------- */
+.head-links { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+.linkbtn { height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: var(--link); font-size: 12px; font-weight: 600; }
+.linkbtn:active { background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.linkbtn:disabled { opacity: 0.55; }
+.update-name { margin: -6px 0 10px; font-size: 13px; color: var(--muted); }
+.update-notes { max-height: 42vh; overflow: auto; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text); }

@@ -2,6 +2,15 @@
   'use strict';
 
   var app = document.getElementById('app');
+  var GITHUB_URL = 'https://github.com/NanXianBin/Metacritic_GameRating';
+  var APP_VERSION = (function () {
+    try {
+      if (window.Android && window.Android.getVersionName) {
+        return String(window.Android.getVersionName() || '1.7');
+      }
+    } catch (error) { /* ignore */ }
+    return '1.7';
+  })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
   var hasStorage = !!(window.Android && window.Android.loadState && window.Android.saveState);
@@ -694,6 +703,83 @@
     });
   }
 
+  function versionParts(value) {
+    return String(value || '').replace(/^v/i, '').split('.').map(function (part) {
+      var number = parseInt(part, 10);
+      return Number.isFinite(number) ? number : 0;
+    });
+  }
+
+  function isNewerVersion(latest, current) {
+    var a = versionParts(latest);
+    var b = versionParts(current);
+    var length = Math.max(a.length, b.length);
+    for (var index = 0; index < length; index += 1) {
+      var left = a[index] || 0;
+      var right = b[index] || 0;
+      if (left > right) return true;
+      if (left < right) return false;
+    }
+    return false;
+  }
+
+  var updateChecking = false;
+
+  function showUpdateSheet(tag, name, body, url) {
+    var notes = String(body || '').replace(/[#*`>]/g, '').trim();
+    if (notes.length > 500) notes = notes.slice(0, 500) + '…';
+    showSheet(
+      '<div class="sheet-handle"></div>' +
+      '<div class="sheet-title">发现新版本 ' + esc(tag) + '</div>' +
+      '<div class="update-name">' + esc(name) + '</div>' +
+      '<div class="update-notes">' + esc(notes) + '</div>' +
+      '<div class="sheet-actions">' +
+        '<button class="btn-text" id="updateLater" type="button">稍后</button>' +
+        '<button class="btn-filled" id="updateGo" type="button">前往下载</button>' +
+      '</div>'
+    );
+    document.getElementById('updateLater').addEventListener('click', closeSheet);
+    document.getElementById('updateGo').addEventListener('click', function () {
+      closeSheet();
+      if (window.Android && window.Android.openUrl) window.Android.openUrl(url);
+      else window.open(url, '_blank');
+    });
+  }
+
+  function checkUpdate() {
+    if (updateChecking) return;
+    updateChecking = true;
+    var button = document.getElementById('checkUpdateBtn');
+    if (button) { button.disabled = true; button.textContent = '检查中…'; }
+    fetch('https://api.github.com/repos/NanXianBin/Metacritic_GameRating/releases/latest')
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function (data) {
+        var latest = data.tag_name || '';
+        if (isNewerVersion(latest, APP_VERSION)) {
+          showUpdateSheet(
+            latest,
+            data.name || latest,
+            data.body || '',
+            data.html_url || GITHUB_URL + '/releases',
+          );
+        } else {
+          toast('已是最新版本 v' + APP_VERSION);
+        }
+      })
+      .catch(function () {
+        toast('无法连接 GitHub，已打开 Releases 页面');
+        if (window.Android && window.Android.openUrl) window.Android.openUrl(GITHUB_URL + '/releases');
+        else window.open(GITHUB_URL + '/releases', '_blank');
+      })
+      .finally(function () {
+        updateChecking = false;
+        if (button) { button.disabled = false; button.textContent = '检查更新'; }
+      });
+  }
+
   function shell() {
     var translated = 0;
     allGames().forEach(function (game) { if (tr(game.title)) translated += 1; });
@@ -704,6 +790,10 @@
             '<div><h1>Metacritic 游戏评分</h1><p class="sub">开发者：南仙 · 数据来自 Metacritic</p></div>' +
           '</div>' +
           '<button class="icon-btn" id="themeBtn" aria-label="切换主题">' + (state.theme === 'neon' ? '☀' : '✦') + '</button>' +
+        '</div>' +
+        '<div class="head-links">' +
+          '<button class="linkbtn" id="checkUpdateBtn" type="button">检查更新</button>' +
+          '<button class="linkbtn" id="githubBtn" type="button">GitHub 仓库 ↗</button>' +
         '</div>' +
         '<div class="tools">' +
           '<button class="tool" id="incBtn"' + (state.busy ? ' disabled' : '') + '>实时抓取</button>' +
@@ -752,6 +842,11 @@
     document.getElementById('yearBtn').addEventListener('click', openYearSheet);
     document.getElementById('platformBtn').addEventListener('click', openPlatformSheet);
     document.getElementById('sortBtn').addEventListener('click', openSortSheet);
+    document.getElementById('checkUpdateBtn').addEventListener('click', checkUpdate);
+    document.getElementById('githubBtn').addEventListener('click', function () {
+      if (window.Android && window.Android.openUrl) window.Android.openUrl(GITHUB_URL);
+      else window.open(GITHUB_URL, '_blank');
+    });
     if (state.busy && state.progress) updateProgressBar();
     if (state.bulk) updateBulkBar();
   }

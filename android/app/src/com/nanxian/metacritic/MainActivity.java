@@ -179,6 +179,15 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getVersionName() {
+            try {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception error) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
         public void setTheme(final boolean light) {
             runOnUiThread(() -> {
                 if (root != null) {
