@@ -288,3 +288,6 @@ body.neon .mfield select { background: rgba(10, 5, 26, 0.7); }
 .dialog .btn-text { align-self: flex-end; }
 .update-name { margin: -6px 0 10px; font-size: 13px; color: var(--muted); }
 .update-notes { max-height: 42vh; overflow: auto; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text); }
+
+/* ---------- header actions ---------- */
+.head-actions { display: flex; align-items: center; gap: 6px; flex: none; margin-left: auto; }

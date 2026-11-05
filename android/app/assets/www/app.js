@@ -6,10 +6,10 @@
   var APP_VERSION = (function () {
     try {
       if (window.Android && window.Android.getVersionName) {
-        return String(window.Android.getVersionName() || '1.8');
+        return String(window.Android.getVersionName() || '1.9');
       }
     } catch (error) { /* ignore */ }
-    return '1.8';
+    return '1.9';
   })();
   var hasAndroid = !!(window.Android && window.Android.httpGet);
   var hasTranslate = !!(window.Android && window.Android.translate);
@@ -834,8 +834,10 @@
           '<div class="brand"><div class="logo">M</div>' +
             '<div><h1>Metacritic 游戏评分</h1><p class="sub">开发者：南仙 · 数据来自 Metacritic</p></div>' +
           '</div>' +
-          '<button class="icon-btn" id="moreBtn" aria-label="更多">⋯</button>' +
-          '<button class="icon-btn" id="themeBtn" aria-label="切换主题">' + (state.theme === 'neon' ? '☀' : '✦') + '</button>' +
+          '<div class="head-actions">' +
+            '<button class="icon-btn" id="themeBtn" aria-label="切换主题">' + (state.theme === 'neon' ? '☀' : '✦') + '</button>' +
+            '<button class="icon-btn" id="moreBtn" aria-label="更多">⋯</button>' +
+          '</div>' +
         '</div>' +
         '<div class="tools">' +
           '<button class="tool" id="incBtn"' + (state.busy ? ' disabled' : '') + '>实时抓取</button>' +
@@ -884,7 +886,8 @@
     document.getElementById('yearBtn').addEventListener('click', openYearSheet);
     document.getElementById('platformBtn').addEventListener('click', openPlatformSheet);
     document.getElementById('sortBtn').addEventListener('click', openSortSheet);
-    document.getElementById('moreBtn').addEventListener('click', openMoreDialog);    if (state.busy && state.progress) updateProgressBar();
+    document.getElementById('moreBtn').addEventListener('click', openMoreDialog);
+    if (state.busy && state.progress) updateProgressBar();
     if (state.bulk) updateBulkBar();
   }
 
